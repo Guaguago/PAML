@@ -1,10 +1,11 @@
 import matplotlib
 
 matplotlib.use('Agg')
-from utils.data_reader import Personas
+from utils.data_reader import Personas_CVAE
 from model.transformer import Transformer
 from model.common_layer import NoamOpt, evaluate
 from utils import config
+from model.CVAE.util.config import Model_Config
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,7 +20,9 @@ import seaborn as sns
 import math
 from tensorboardX import SummaryWriter
 import os
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+from model.CVAE.model import Model
 
 
 def make_infinite(dataloader):
@@ -111,13 +114,18 @@ def do_evaluation(model, test_iter):
 
 # =================================main=================================
 
-p = Personas()
+# Model config for CVAE-dialog
+model_config = Model_Config()
+
+# p = Personas()
+p = Personas_CVAE()
 writer = SummaryWriter(log_dir=config.save_path)
 # Build model, optimizer, and set states
 if not (config.load_frompretrain == 'None'):
     meta_net = Transformer(p.vocab, model_file_path=config.load_frompretrain, is_eval=False)
 else:
-    meta_net = Transformer(p.vocab)
+    # meta_net = Transformer(p.vocab)
+    meta_net = Model(model_config)
 if config.meta_optimizer == 'sgd':
     meta_optimizer = torch.optim.SGD(meta_net.parameters(), lr=config.meta_lr)
 elif config.meta_optimizer == 'adam':
@@ -205,7 +213,7 @@ for meta_iteration in range(config.epochs):
             val_loss_meta.append(math.exp(val_loss.item()))
             # updated result
 
-            meta_net.load_state_dict({ name: weights_original[name] for name in weights_original })
+            meta_net.load_state_dict({name: weights_original[name] for name in weights_original})
 
         writer.add_scalars('loss_before', {'val_loss_before': np.mean(val_loss_before)}, meta_iteration)
         writer.add_scalars('loss_meta', {'val_loss_meta': np.mean(val_loss_meta)}, meta_iteration)
