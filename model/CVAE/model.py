@@ -6,15 +6,16 @@ from model.CVAE.PriorNet import PriorNet
 from model.CVAE.RecognizeNet import RecognizeNet
 from model.CVAE.Decoder import Decoder
 from model.CVAE.PrepareState import PrepareState
+from utils import config
 
 
 class Model(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, vocab):
         super(Model, self).__init__()
         self.config = config
-
+        self.vocab = vocab
         # 定义嵌入层
-        self.embedding = Embedding(config.num_vocab,  # 词汇表大小
+        self.embedding = Embedding(vocab,  # 词汇表大小
                                    config.embedding_size,  # 嵌入层维度
                                    config.pad_id,  # pad_id
                                    config.dropout)
@@ -47,7 +48,7 @@ class Model(nn.Module):
                                           config.dims_recognize)  # 隐藏层维度
 
         # 初始化解码器状态
-        self.prepare_state = PrepareState(config.post_encoder_output_size+config.latent_size,
+        self.prepare_state = PrepareState(config.post_encoder_output_size + config.latent_size,
                                           config.decoder_cell_type,
                                           config.decoder_output_size,
                                           config.decoder_num_layers)
@@ -61,7 +62,7 @@ class Model(nn.Module):
 
         # 输出层
         self.projector = nn.Sequential(
-            nn.Linear(config.decoder_output_size, config.num_vocab),
+            nn.Linear(config.decoder_output_size, vocab.n_words),
             nn.Softmax(-1)
         )
 
@@ -202,3 +203,19 @@ class Model(nn.Module):
         epoch = checkpoint['epoch']
         global_step = checkpoint['global_step']
         return epoch, global_step
+
+    def train_one_batch(self, batch, train=True):
+        output_vocab, _mu, _logvar, mu, logvar = self.forward(batch, gpu=config.USE_CUDA)  # 前向传播
+
+        if (train):
+            pass
+        pass
+
+    def to_CVAE_batch(self, batch):
+        pass
+
+    def to_CVAE_input_batch(self, batch):
+        pass
+
+    def to_CVAE_ouput_batch(self, batch):
+        pass

@@ -125,7 +125,7 @@ if not (config.load_frompretrain == 'None'):
     meta_net = Transformer(p.vocab, model_file_path=config.load_frompretrain, is_eval=False)
 else:
     # meta_net = Transformer(p.vocab)
-    meta_net = Model(model_config)
+    meta_net = Model(model_config, p.vocab)
 if config.meta_optimizer == 'sgd':
     meta_optimizer = torch.optim.SGD(meta_net.parameters(), lr=config.meta_lr)
 elif config.meta_optimizer == 'adam':
