@@ -1,5 +1,8 @@
+import math
+import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from model.CVAE.Embedding import Embedding
 from model.CVAE.Encoder import Encoder
 from model.CVAE.PriorNet import PriorNet
@@ -10,61 +13,69 @@ from utils import config
 
 
 class Model(nn.Module):
-    def __init__(self, config, vocab):
+    def __init__(self, model_config, vocab):
         super(Model, self).__init__()
-        self.config = config
+        self.model_config = model_config
         self.vocab = vocab
+        self.model_dir = config.save_path
         # 定义嵌入层
         self.embedding = Embedding(vocab,  # 词汇表大小
-                                   config.embedding_size,  # 嵌入层维度
-                                   config.pad_id,  # pad_id
-                                   config.dropout)
+                                   model_config.embedding_size,  # 嵌入层维度
+                                   model_config.pad_id,  # pad_id
+                                   model_config.dropout)
 
         # post编码器
-        self.post_encoder = Encoder(config.post_encoder_cell_type,  # rnn类型
-                                    config.embedding_size,  # 输入维度
-                                    config.post_encoder_output_size,  # 输出维度
-                                    config.post_encoder_num_layers,  # rnn层数
-                                    config.post_encoder_bidirectional,  # 是否双向
-                                    config.dropout)  # dropout概率
+        self.post_encoder = Encoder(model_config.post_encoder_cell_type,  # rnn类型
+                                    model_config.embedding_size,  # 输入维度
+                                    model_config.post_encoder_output_size,  # 输出维度
+                                    model_config.post_encoder_num_layers,  # rnn层数
+                                    model_config.post_encoder_bidirectional,  # 是否双向
+                                    model_config.dropout)  # dropout概率
 
         # response编码器
-        self.response_encoder = Encoder(config.response_encoder_cell_type,
-                                        config.embedding_size,  # 输入维度
-                                        config.response_encoder_output_size,  # 输出维度
-                                        config.response_encoder_num_layers,  # rnn层数
-                                        config.response_encoder_bidirectional,  # 是否双向
-                                        config.dropout)  # dropout概率
+        self.response_encoder = Encoder(model_config.response_encoder_cell_type,
+                                        model_config.embedding_size,  # 输入维度
+                                        model_config.response_encoder_output_size,  # 输出维度
+                                        model_config.response_encoder_num_layers,  # rnn层数
+                                        model_config.response_encoder_bidirectional,  # 是否双向
+                                        model_config.dropout)  # dropout概率
 
         # 先验网络
-        self.prior_net = PriorNet(config.post_encoder_output_size,  # post输入维度
-                                  config.latent_size,  # 潜变量维度
-                                  config.dims_prior)  # 隐藏层维度
+        self.prior_net = PriorNet(model_config.post_encoder_output_size,  # post输入维度
+                                  model_config.latent_size,  # 潜变量维度
+                                  model_config.dims_prior)  # 隐藏层维度
 
         # 识别网络
-        self.recognize_net = RecognizeNet(config.post_encoder_output_size,  # post输入维度
-                                          config.response_encoder_output_size,  # response输入维度
-                                          config.latent_size,  # 潜变量维度
-                                          config.dims_recognize)  # 隐藏层维度
+        self.recognize_net = RecognizeNet(model_config.post_encoder_output_size,  # post输入维度
+                                          model_config.response_encoder_output_size,  # response输入维度
+                                          model_config.latent_size,  # 潜变量维度
+                                          model_config.dims_recognize)  # 隐藏层维度
 
         # 初始化解码器状态
-        self.prepare_state = PrepareState(config.post_encoder_output_size + config.latent_size,
-                                          config.decoder_cell_type,
-                                          config.decoder_output_size,
-                                          config.decoder_num_layers)
+        self.prepare_state = PrepareState(model_config.post_encoder_output_size + model_config.latent_size,
+                                          model_config.decoder_cell_type,
+                                          model_config.decoder_output_size,
+                                          model_config.decoder_num_layers)
 
         # 解码器
-        self.decoder = Decoder(config.decoder_cell_type,  # rnn类型
-                               config.embedding_size,  # 输入维度
-                               config.decoder_output_size,  # 输出维度
-                               config.decoder_num_layers,  # rnn层数
-                               config.dropout)  # dropout概率
+        self.decoder = Decoder(model_config.decoder_cell_type,  # rnn类型
+                               model_config.embedding_size,  # 输入维度
+                               model_config.decoder_output_size,  # 输出维度
+                               model_config.decoder_num_layers,  # rnn层数
+                               model_config.dropout)  # dropout概率
 
         # 输出层
         self.projector = nn.Sequential(
-            nn.Linear(config.decoder_output_size, vocab.n_words),
+            nn.Linear(model_config.decoder_output_size, vocab.n_words),
             nn.Softmax(-1)
         )
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=config.lr)
+        if (config.noam):
+            self.optimizer = NoamOpt(config.hidden_dim, 1, 4000,
+                                     torch.optim.Adam(self.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+        if config.use_sgd:
+            self.optimizer = torch.optim.SGD(self.parameters(), lr=config.lr)
 
     def forward(self, inputs, inference=False, max_len=60, gpu=True):
         if not inference:  # 训练
@@ -134,7 +145,7 @@ class Model(nn.Module):
 
             first_state = self.prepare_state(torch.cat([z, x], 1))  # [num_layer, batch, dim_out]
             done = torch.tensor([0] * batch_size).bool()
-            first_input_id = (torch.ones((1, batch_size)) * self.config.start_id).long()
+            first_input_id = (torch.ones((1, batch_size)) * self.model_config.start_id).long()
             if gpu:
                 done = done.cuda()
                 first_input_id = first_input_id.cuda()
@@ -154,7 +165,7 @@ class Model(nn.Module):
                 vocab_prob = self.projector(output)  # [1, batch, num_vocab]
                 next_input_id = torch.argmax(vocab_prob, 2)  # 选择概率最大的词作为下个时间步的输入 [1, batch]
 
-                _done = next_input_id.squeeze(0) == self.config.end_id  # 当前时间步完成解码的 [batch]
+                _done = next_input_id.squeeze(0) == self.model_config.end_id  # 当前时间步完成解码的 [batch]
                 done = done | _done  # 所有完成解码的
                 if done.sum() == batch_size:  # 如果全部解码完成则提前停止
                     break
@@ -176,18 +187,22 @@ class Model(nn.Module):
             total_num += num
         print(f"参数总数: {total_num}")
 
-    def save_model(self, epoch, global_step, path):
+    def save_model(self, running_avg_ppl, epoch, global_step):
         r""" 保存模型 """
-        torch.save({'embedding': self.embedding.state_dict(),
-                    'post_encoder': self.post_encoder.state_dict(),
-                    'response_encoder': self.response_encoder.state_dict(),
-                    'prior_net': self.prior_net.state_dict(),
-                    'recognize_net': self.recognize_net.state_dict(),
-                    'prepare_state': self.prepare_state.state_dict(),
-                    'decoder': self.decoder.state_dict(),
-                    'projector': self.projector.state_dict(),
-                    'epoch': epoch,
-                    'global_step': global_step}, path)
+        state = {'embedding': self.embedding.state_dict(),
+                 'post_encoder': self.post_encoder.state_dict(),
+                 'response_encoder': self.response_encoder.state_dict(),
+                 'prior_net': self.prior_net.state_dict(),
+                 'recognize_net': self.recognize_net.state_dict(),
+                 'prepare_state': self.prepare_state.state_dict(),
+                 'decoder': self.decoder.state_dict(),
+                 'projector': self.projector.state_dict(),
+                 'epoch': epoch,
+                 'global_step': global_step}
+
+        model_save_path = os.path.join(self.model_dir,
+                                       'model_{}_{:.4f}_{}'.format(running_avg_ppl, epoch, global_step))
+        torch.save(state, model_save_path)
 
     def load_model(self, path):
         r""" 载入模型 """
@@ -206,16 +221,82 @@ class Model(nn.Module):
 
     def train_one_batch(self, batch, train=True):
         output_vocab, _mu, _logvar, mu, logvar = self.forward(batch, gpu=config.USE_CUDA)  # 前向传播
-
+        outputs = (output_vocab, _mu, _logvar, mu, logvar)
+        labels = batch['responses'][:, 1:]  # 去掉start_id
+        masks = batch['masks']
+        loss, nll_loss, kld_loss, ppl, kld_weight = self.compute_loss(outputs, labels, masks, 0)  # 计算损失
+        loss = loss.mean()
         if (train):
-            pass
-        pass
+            loss.backward()  # 反向传播
+            self.optimizer.step()  # 更新参数
+            self.optimizer.zero_grad()  # 清空梯度
 
-    def to_CVAE_batch(self, batch):
-        pass
+        return loss.item(), math.exp(min(loss.item(), 100)), loss
 
-    def to_CVAE_input_batch(self, batch):
-        pass
+    def compute_loss(self, outputs, labels, masks, global_step):
+        def gaussian_kld(recog_mu, recog_logvar, prior_mu, prior_logvar):  # [batch, latent]
+            """ 两个高斯分布之间的kl散度公式 """
+            kld = 0.5 * torch.sum(prior_logvar - recog_logvar - 1
+                                  + recog_logvar.exp() / prior_logvar.exp()
+                                  + (prior_mu - recog_mu).pow(2) / prior_logvar.exp(), 1)
+            return kld  # [batch]
 
-    def to_CVAE_ouput_batch(self, batch):
-        pass
+        # output_vocab: [batch, len_decoder, num_vocab] 对每个单词的softmax概率
+        output_vocab, _mu, _logvar, mu, logvar = outputs  # 先验的均值、log方差，后验的均值、log方差
+
+        token_per_batch = masks.sum(1)  # 每个样本要计算损失的token数 [batch]
+        len_decoder = masks.size(1)  # 解码长度
+
+        output_vocab = output_vocab.reshape(-1, self.vocab.n_words)  # [batch*len_decoder, num_vocab]
+        labels = labels.reshape(-1)  # [batch*len_decoder]
+        masks = masks.reshape(-1)  # [batch*len_decoder]
+
+        # nll_loss需要自己求log，它只是把label指定下标的损失取负并拿出来，reduction='none'代表只是拿出来，而不需要求和或者求均值
+        _nll_loss = F.nll_loss(output_vocab.clamp_min(1e-12).log(), labels,
+                               reduction='none')  # 每个token的-log似然 [batch*len_decoder]
+        _nll_loss = _nll_loss * masks  # 忽略掉不需要计算损失的token [batch*len_decoder]
+
+        nll_loss = _nll_loss.reshape(-1, len_decoder).sum(1)  # 每个batch的nll损失 [batch]
+
+        ppl = nll_loss / token_per_batch.clamp_min(1e-12)  # ppl的计算需要平均到每个有效的token上 [batch]
+
+        # kl散度损失 [batch]
+        kld_loss = gaussian_kld(mu, logvar, _mu, _logvar)
+
+        # kl退火
+        # kld_weight = min(1.0 * global_step / model_config.kl_step, 1)  # 一次性退火
+        kld_weight = min(1.0 * (global_step % (2 * self.model_config.kl_step)) / self.model_config.kl_step, 1)  # 周期性退火
+
+        # 损失
+        loss = nll_loss + kld_weight * kld_loss
+
+        return loss, nll_loss, kld_loss, ppl, kld_weight
+
+
+class NoamOpt:
+    "Optim wrapper that implements rate."
+
+    def __init__(self, model_size, factor, warmup, optimizer):
+        self.optimizer = optimizer
+        self._step = 0
+        self.warmup = warmup
+        self.factor = factor
+        self.model_size = model_size
+        self._rate = 0
+
+    def step(self):
+        "Update parameters and rate"
+        self._step += 1
+        rate = self.rate()
+        for p in self.optimizer.param_groups:
+            p['lr'] = rate
+        self._rate = rate
+        self.optimizer.step()
+
+    def rate(self, step=None):
+        "Implement `lrate` above"
+        if step is None:
+            step = self._step
+        return self.factor * \
+               (self.model_size ** (-0.5) *
+                min(step ** (-0.5), step * self.warmup ** (-1.5)))
