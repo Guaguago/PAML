@@ -2,7 +2,7 @@ import matplotlib
 
 matplotlib.use('Agg')
 from utils.data_reader import Personas_CVAE
-# from model.transformer import Transformer
+from model.transformer import Transformer
 from model.common_layer import NoamOpt, evaluate
 from utils import config
 from model.CVAE.util.config import Model_Config
@@ -128,6 +128,8 @@ else:
     # meta_net = Transformer(p.vocab)
     meta_net = Model(model_config, p.vocab)
     meta_net.print_parameters()  # 输出模型参数个数
+    if config.USE_CUDA:
+        meta_net.to('cuda')
 if config.meta_optimizer == 'sgd':
     meta_optimizer = torch.optim.SGD(meta_net.parameters(), lr=config.meta_lr)
 elif config.meta_optimizer == 'adam':
