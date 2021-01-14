@@ -8,6 +8,7 @@ from utils import config
 from model.CVAE.util.config import Model_Config
 import torch
 import torch.nn as nn
+from model.CVAE.Optim import Optim
 import torch.nn.functional as F
 from tqdm import tqdm
 import os
@@ -140,6 +141,12 @@ elif config.meta_optimizer == 'noam':
 else:
     raise ValueError
 
+# CVAE-Optimizer
+model_optim = Optim(model_config.method, model_config.lr, model_config.lr_decay, model_config.weight_decay,
+                    model_config.max_grad_norm)
+model_optim.set_parameters(meta_net.parameters())  # 给优化器设置参数
+meta_net.optim = model_optim
+
 meta_batch_size = config.meta_batch_size
 tasks = p.get_personas('train')
 # tasks_loader = {t: p.get_data_loader(persona=t,batch_size=config.batch_size, split='train') for t in tasks}
@@ -153,6 +160,7 @@ best_loss = 10000000
 stop_count = 0
 # Main loop
 for meta_iteration in range(config.epochs):
+
     ## save original weights to make the update
     weights_original = deepcopy(meta_net.state_dict())
     train_loss_before = []
@@ -183,6 +191,8 @@ for meta_iteration in range(config.epochs):
     writer.add_scalars('loss_meta', {'train_loss_meta': np.mean(train_loss_meta)}, meta_iteration)
     print(' loss_before: {}'.format(np.mean(train_loss_before)))
     print(' loss_meta: {}'.format(np.mean(np.mean(train_loss_meta))))
+
+    meta_net.optim.update_lr(meta_iteration)  # 每个epoch更新学习率
 
     # meta Update
     if (config.meta_optimizer == 'noam'):

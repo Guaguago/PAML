@@ -70,12 +70,12 @@ class Model(nn.Module):
             nn.Softmax(-1)
         )
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=config.lr)
-        if (config.noam):
-            self.optimizer = NoamOpt(config.hidden_dim, 1, 4000,
-                                     torch.optim.Adam(self.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-        if config.use_sgd:
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=config.lr)
+        # self.optimizer = torch.optim.Adam(self.parameters(), lr=config.lr)
+        # if (config.noam):
+        #     self.optimizer = NoamOpt(config.hidden_dim, 1, 4000,
+        #                              torch.optim.Adam(self.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+        # if config.use_sgd:
+        #     self.optimizer = torch.optim.SGD(self.parameters(), lr=config.lr)
 
     def forward(self, inputs, inference=False, max_len=60, gpu=True):
         if not inference:  # 训练
