@@ -228,8 +228,8 @@ class Model(nn.Module):
         loss = loss.mean()
         if (train):
             loss.backward()  # 反向传播
-            self.optimizer.step()  # 更新参数
-            self.optimizer.zero_grad()  # 清空梯度
+            self.optim.step()  # 更新参数
+            self.optim.zero_grad()  # 清空梯度
 
         return loss.item(), math.exp(min(loss.item(), 100)), loss
 
