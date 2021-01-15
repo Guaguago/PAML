@@ -201,7 +201,7 @@ class Model(nn.Module):
                  'global_step': global_step}
 
         model_save_path = os.path.join(self.model_dir,
-                                       'model_{}_{:.4f}_{}'.format(running_avg_ppl, epoch, global_step))
+                                       'model_{}_{:.3f}_{}'.format(running_avg_ppl, epoch, global_step))
         torch.save(state, model_save_path)
 
     def load_model(self, path):
