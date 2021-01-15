@@ -167,6 +167,7 @@ for meta_iteration in range(config.epochs):
     train_loss_meta = []
     # loss accumulate from a batch of tasks
     batch_loss = 0
+    batch_loss_before = 0
     for _ in range(meta_batch_size):
         # Get task
         if config.fix_dialnum_train:
@@ -178,6 +179,7 @@ for meta_iteration in range(config.epochs):
         # before first update
         v_loss, v_ppl = do_evaluation(meta_net, val_iter)
         train_loss_before.append(math.exp(v_loss))
+        batch_loss_before += v_loss
         # Update fast nets   
         val_loss, v_ppl = do_learning_fix_step(meta_net, train_iter, val_iter, iterations=config.meta_iteration)
         train_loss_meta.append(math.exp(val_loss.item()))
@@ -189,8 +191,8 @@ for meta_iteration in range(config.epochs):
 
     writer.add_scalars('loss_before', {'train_loss_before': np.mean(train_loss_before)}, meta_iteration)
     writer.add_scalars('loss_meta', {'train_loss_meta': np.mean(train_loss_meta)}, meta_iteration)
-    print(' loss_before: {}'.format(np.mean(train_loss_before)))
-    print(' loss_meta: {}'.format(np.mean(np.mean(train_loss_meta))))
+    # print(' loss_before: {}'.format(np.mean(train_loss_before)))
+    # print(' loss_meta: {}'.format(np.mean(np.mean(train_loss_meta))))
 
     meta_net.optim.update_lr(meta_iteration)  # 每个epoch更新学习率
 
@@ -199,8 +201,14 @@ for meta_iteration in range(config.epochs):
         meta_optimizer.optimizer.zero_grad()
     else:
         meta_optimizer.zero_grad()
+
+    batch_loss_before /= meta_batch_size
     batch_loss /= meta_batch_size
     batch_loss.backward()
+    print('loss_before: {:.3f}'.format(batch_loss_before))
+    print('loss_after: {:.3f}'.format(batch_loss))
+
+
     # clip gradient
     nn.utils.clip_grad_norm_(meta_net.parameters(), config.max_grad_norm)
     meta_optimizer.step()
