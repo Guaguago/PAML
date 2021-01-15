@@ -156,7 +156,8 @@ tasks_iter = make_infinite_list(tasks)
 patience = 50
 if config.fix_dialnum_train:
     patience = 100
-best_loss = 10000000
+# best_loss = 10000000
+best_loss = 100
 stop_count = 0
 # Main loop
 for meta_iteration in range(config.epochs):
@@ -215,9 +216,12 @@ for meta_iteration in range(config.epochs):
 
     ## Meta-Evaluation
     if meta_iteration % 10 == 0:
-        print('Meta_iteration:', meta_iteration)
+        print('Validation')
+        print('    Meta_iteration:', meta_iteration)
         val_loss_before = []
         val_loss_meta = []
+        val_batch_loss_before = 0
+        val_batch_loss_after = 0
         weights_original = deepcopy(meta_net.state_dict())
         for idx, per in enumerate(p.get_personas('valid')):
             # num_of_dialog = p.get_num_of_dialog(persona=per, split='valid')
@@ -232,15 +236,23 @@ for meta_iteration in range(config.epochs):
             # zero shot result
             loss, ppl = do_evaluation(meta_net, val_iter)
             val_loss_before.append(math.exp(loss))
+            val_batch_loss_before += loss
             # mate tuning
             val_loss, val_ppl = do_learning_fix_step(meta_net, train_iter, val_iter, iterations=config.meta_iteration)
             val_loss_meta.append(math.exp(val_loss.item()))
+            val_batch_loss_after += val_loss
             # updated result
 
             meta_net.load_state_dict({name: weights_original[name] for name in weights_original})
 
         writer.add_scalars('loss_before', {'val_loss_before': np.mean(val_loss_before)}, meta_iteration)
         writer.add_scalars('loss_meta', {'val_loss_meta': np.mean(val_loss_meta)}, meta_iteration)
+
+        val_batch_loss_before /= 100
+        val_batch_loss_after /= 100
+        print('    val_loss: {:.3f} ===> {:.3f}'.format(val_batch_loss_before, val_batch_loss_after))
+
+
         # check early stop
         if np.mean(val_loss_meta) < best_loss:
             best_loss = np.mean(val_loss_meta)
