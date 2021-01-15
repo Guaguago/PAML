@@ -157,7 +157,7 @@ patience = 50
 if config.fix_dialnum_train:
     patience = 100
 # best_loss = 10000000
-best_loss = 100
+best_loss = 100.0
 stop_count = 0
 # Main loop
 for meta_iteration in range(config.epochs):
@@ -257,7 +257,8 @@ for meta_iteration in range(config.epochs):
         # check early stop
         # if np.mean(val_loss_meta) < best_loss:
         if val_batch_loss_after < best_loss:
-            best_loss = np.mean(val_loss_meta)
+            # best_loss = np.mean(val_loss_meta)
+            best_loss = val_batch_loss_after
             stop_count = 0
             meta_net.save_model(best_loss, meta_iteration, 0)
         else:
