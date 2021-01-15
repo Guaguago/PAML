@@ -216,8 +216,8 @@ for meta_iteration in range(config.epochs):
 
     ## Meta-Evaluation
     if meta_iteration % 10 == 0:
-        print('Validation')
-        print('    Meta_iteration:', meta_iteration)
+        print('--------- Validation ---------')
+        print('Meta_iteration:', meta_iteration)
         val_loss_before = []
         val_loss_meta = []
         val_batch_loss_before = 0
@@ -250,11 +250,13 @@ for meta_iteration in range(config.epochs):
 
         val_batch_loss_before /= 100
         val_batch_loss_after /= 100
-        print('    val_loss: {:.3f} ===> {:.3f}'.format(val_batch_loss_before, val_batch_loss_after))
+        print('val_loss: {:.3f} ===> {:.3f}'.format(val_batch_loss_before, val_batch_loss_after))
+        print('------------------------------')
 
 
         # check early stop
-        if np.mean(val_loss_meta) < best_loss:
+        # if np.mean(val_loss_meta) < best_loss:
+        if val_batch_loss_after < best_loss:
             best_loss = np.mean(val_loss_meta)
             stop_count = 0
             meta_net.save_model(best_loss, meta_iteration, 0)
