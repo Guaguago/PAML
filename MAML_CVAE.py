@@ -206,9 +206,7 @@ for meta_iteration in range(config.epochs):
     batch_loss_before /= meta_batch_size
     batch_loss /= meta_batch_size
     batch_loss.backward()
-    print('loss_before: {:.3f}'.format(batch_loss_before))
-    print('loss_after: {:.3f}'.format(batch_loss))
-
+    print('train_loss: {:.3f} ===> {:.3f}'.format(batch_loss_before, batch_loss))
 
     # clip gradient
     nn.utils.clip_grad_norm_(meta_net.parameters(), config.max_grad_norm)
@@ -252,7 +250,6 @@ for meta_iteration in range(config.epochs):
         val_batch_loss_after /= 100
         print('val_loss: {:.3f} ===> {:.3f}'.format(val_batch_loss_before, val_batch_loss_after))
         print('------------------------------')
-
 
         # check early stop
         # if np.mean(val_loss_meta) < best_loss:
