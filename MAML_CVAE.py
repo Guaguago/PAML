@@ -217,7 +217,7 @@ for meta_iteration in range(config.epochs):
     ## Meta-Evaluation
     if meta_iteration % 10 == 0:
         print('--------- Validation ---------')
-        print('Meta_iteration:', meta_iteration)
+        print('meta_iteration:', meta_iteration)
         val_loss_before = []
         val_loss_meta = []
         val_batch_loss_before = 0
