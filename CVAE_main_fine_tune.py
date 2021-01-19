@@ -4,7 +4,6 @@ from utils.data_reader import Personas_CVAE
 matplotlib.use('Agg')
 from utils.data_reader import Personas
 from model.transformer import Transformer
-from model.common_layer import evaluate
 from model.CVAE.model import Model
 from model.CVAE.util.config import Model_Config
 import pickle
@@ -28,14 +27,14 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 def do_learning(model, train_iter, val_iter, iterations):
     logger = {str(i): [] for i in range(iterations)}
-    loss, ppl_val, ent_b, bleu_score_b = evaluate(model, val_iter, model_name=config.model, ty="test", verbose=False)
+    loss, ppl_val, ent_b, bleu_score_b = model.evaluate(val_iter, model_name=config.model, ty="test", verbose=False)
     logger[str(0)] = [loss, ppl_val, ent_b, bleu_score_b]
     for i in range(1, iterations):
         for j, d in enumerate(train_iter):
             _, _, _ = model.train_one_batch(d)
         if (i in [1, 3, 5, 7, 10]):  # 1,3,5,7,
-            loss, ppl_val, ent_b, bleu_score_b = evaluate(model, val_iter, model_name=config.model, ty="test",
-                                                          verbose=False)
+            loss, ppl_val, ent_b, bleu_score_b = model.evaluate(val_iter, model_name=config.model, ty="test",
+                                                                verbose=False)
             logger[str(i)] = [loss, ppl_val, ent_b, bleu_score_b]
     return logger
 
@@ -49,7 +48,7 @@ print("Test model", config.model)
 model = Model(model_config, p.vocab, model_file_path=config.save_path, is_eval=False)
 fine_tune = []
 iter_per_task = []
-iterations = 2
+iterations = 11
 weights_original = deepcopy(model.state_dict())
 tasks = p.get_personas('test')
 for per in tqdm(tasks):
@@ -71,10 +70,10 @@ if config.fix_dialnum_train:
     config.save_path = config.save_path + '_fix_dialnum_' + str(config.k_shot) + '_'
 pickle.dump([fine_tune, iterations], open(config.save_path + 'evaluation.p', "wb"))
 measure = ["LOSS", "PPL", "Entl_b", "Bleu_b"]
-temp = {m: [[] for i in [0, 1]] for m in measure}
+temp = {m: [[] for i in [0, 1, 3, 5, 7, 10]] for m in measure}
 for expe in fine_tune:
     for idx_measure, m in enumerate(measure):
-        for j, i in enumerate([0, 1]):
+        for j, i in enumerate([0, 1, 3, 5, 7, 10]):
             temp[m][j].append(expe[str(i)][idx_measure])  ## position 1 is ppl
 
 fig = plt.figure(figsize=(20, 80))

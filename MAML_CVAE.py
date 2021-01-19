@@ -141,11 +141,6 @@ elif config.meta_optimizer == 'noam':
 else:
     raise ValueError
 
-# CVAE-Optimizer
-model_optim = Optim(model_config.method, model_config.lr, model_config.lr_decay, model_config.weight_decay,
-                    model_config.max_grad_norm)
-model_optim.set_parameters(meta_net.parameters())  # 给优化器设置参数
-meta_net.optim = model_optim
 
 meta_batch_size = config.meta_batch_size
 tasks = p.get_personas('train')
