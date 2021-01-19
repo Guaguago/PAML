@@ -66,8 +66,8 @@ for per in tqdm(tasks):
         logger = do_learning(model, train_iter, val_iter, iterations=iterations)
         fine_tune.append(logger)
         model.load_state_dict({name: weights_original[name] for name in weights_original})
+        break
     break
-
 if config.fix_dialnum_train:
     config.save_path = config.save_path + '_fix_dialnum_' + str(config.k_shot) + '_'
 pickle.dump([fine_tune, iterations], open(config.save_path + 'evaluation.p', "wb"))
@@ -94,7 +94,7 @@ plt.savefig(config.save_path + 'epoch_vs_ppl.pdf')
 print("----------------------------------------------------------------------")
 print("epoch\tloss\tPeplexity\tEntl_b\tBleu_b\n")
 for j, i in enumerate([0, 1]):
-    print("{}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\n".format(i, log['LOSS'][j], math.exp(log['LOSS'][j]), log['Entl_b'][j],
+    print("{}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\n".format(i, log['LOSS'][j], log['PPL'][j], log['Entl_b'][j],
                                                         log['Bleu_b'][j]))
 print("----------------------------------------------------------------------")
 with open(config.save_path + 'result.txt', 'w', encoding='utf-8') as f:
