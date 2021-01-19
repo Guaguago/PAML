@@ -46,6 +46,8 @@ p = Personas_CVAE()
 print("Test model", config.model)
 # model = Transformer(p.vocab, model_file_path=config.save_path, is_eval=False)
 model = Model(model_config, p.vocab, model_file_path=config.save_path, is_eval=False)
+if config.USE_CUDA:
+    model.to('cuda')
 fine_tune = []
 iter_per_task = []
 iterations = 11
