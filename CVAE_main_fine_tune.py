@@ -66,8 +66,7 @@ for per in tqdm(tasks):
         logger = do_learning(model, train_iter, val_iter, iterations=iterations)
         fine_tune.append(logger)
         model.load_state_dict({name: weights_original[name] for name in weights_original})
-        break
-    break
+    
 if config.fix_dialnum_train:
     config.save_path = config.save_path + '_fix_dialnum_' + str(config.k_shot) + '_'
 pickle.dump([fine_tune, iterations], open(config.save_path + 'evaluation.p', "wb"))
