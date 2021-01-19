@@ -3,6 +3,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from model.CVAE.Embedding import Embedding
 from model.CVAE.Encoder import Encoder
 from model.CVAE.PriorNet import PriorNet
@@ -10,10 +11,27 @@ from model.CVAE.RecognizeNet import RecognizeNet
 from model.CVAE.Decoder import Decoder
 from model.CVAE.PrepareState import PrepareState
 from utils import config
+from tqdm import tqdm
+from utils.load_bert import bert_model
+from utils.metric import moses_multi_bleu
+import pprint
+from model.CVAE.Optim import Optim
+
+pp = pprint.PrettyPrinter(indent=1)
+
+
+def print_all(dial, ref, hyp_b, max_print):
+    for i in range(len(ref)):
+        print(pp.pformat(dial[i]))
+        print("Beam: {}".format(hyp_b[i]))
+        print("Ref:{}".format(ref[i]))
+        print("----------------------------------------------------------------------")
+        print("----------------------------------------------------------------------")
+        if (i > max_print): break
 
 
 class Model(nn.Module):
-    def __init__(self, model_config, vocab):
+    def __init__(self, model_config, vocab, model_file_path=None, is_eval=False, load_optim=False):
         super(Model, self).__init__()
         self.model_config = model_config
         self.vocab = vocab
@@ -70,12 +88,14 @@ class Model(nn.Module):
             nn.Softmax(-1)
         )
 
-        # self.optimizer = torch.optim.Adam(self.parameters(), lr=config.lr)
-        # if (config.noam):
-        #     self.optimizer = NoamOpt(config.hidden_dim, 1, 4000,
-        #                              torch.optim.Adam(self.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-        # if config.use_sgd:
-        #     self.optimizer = torch.optim.SGD(self.parameters(), lr=config.lr)
+        self.bert = bert_model()
+
+        self.optim = Optim(model_config.method, model_config.lr, model_config.lr_decay, model_config.weight_decay,
+                           model_config.max_grad_norm)
+        self.optim.set_parameters(self.parameters())  # 给优化器设置参数
+
+        if model_file_path is not None:
+            self.load_model(model_file_path)
 
     def forward(self, inputs, inference=False, max_len=60, gpu=True):
         if not inference:  # 训练
@@ -206,7 +226,7 @@ class Model(nn.Module):
 
     def load_model(self, path):
         r""" 载入模型 """
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, map_location=torch.device('cuda' if config.USE_CUDA else 'cpu'))
         self.embedding.load_state_dict(checkpoint['embedding'])
         self.post_encoder.load_state_dict(checkpoint['post_encoder'])
         self.response_encoder.load_state_dict(checkpoint['response_encoder'])
@@ -217,6 +237,7 @@ class Model(nn.Module):
         self.projector.load_state_dict(checkpoint['projector'])
         epoch = checkpoint['epoch']
         global_step = checkpoint['global_step']
+        print('载入模型完成')
         return epoch, global_step
 
     def train_one_batch(self, batch, train=True):
@@ -231,7 +252,7 @@ class Model(nn.Module):
             self.optim.step()  # 更新参数
             self.optim.optimizer.zero_grad()  # 清空梯度
 
-        return loss.item(), math.exp(min(loss.item(), 100)), loss
+        return loss.item(), ppl.mean(), loss
 
     def compute_loss(self, outputs, labels, masks, global_step):
         def gaussian_kld(recog_mu, recog_logvar, prior_mu, prior_logvar):  # [batch, latent]
@@ -271,6 +292,57 @@ class Model(nn.Module):
         loss = nll_loss + kld_weight * kld_loss
 
         return loss, nll_loss, kld_loss, ppl, kld_weight
+
+    def evaluate(self, data, model_name='trs', ty='valid', writer=None, n_iter=0, ty_eval="before", verbose=False):
+        dial, ref, hyp_b = [], [], []
+        # t = Translator(model, model.vocab)
+
+        l = []
+        p = []
+        ent_b = []
+
+        pbar = tqdm(enumerate(data), total=len(data))
+        for j, batch in pbar:
+            loss, ppl, _ = self.train_one_batch(batch, train=False)
+            l.append(loss)
+            p.append(ppl.item())
+            if ((j < 3 and ty != "test") or ty == "test"):
+
+                # sent_b, _ = t.translate_batch(batch)
+                output_vocab, _, _, _, _ = self.forward(batch, inference=True, max_len=60, gpu=config.USE_CUDA)
+                sent_b = output_vocab.argmax(2).detach().tolist()
+
+                for i in range(len(batch["target_txt"])):
+                    new_words = []
+                    for w in sent_b[i]:
+                        if w == config.EOS_idx:
+                            break
+                        new_words.append(w)
+                        if len(new_words) > 2 and (new_words[-2] == w):
+                            new_words.pop()
+
+                    sent_beam_search = ' '.join([self.vocab.index2word[idx] for idx in new_words])
+                    hyp_b.append(sent_beam_search)
+                    ref.append(batch["target_txt"][i])
+                    dial.append(batch['input_txt'][i])
+                    ent_b.append(
+                        self.bert.predict_label([sent_beam_search for _ in range(len(batch['persona_txt'][i]))],
+                                                batch['persona_txt'][i]))
+
+            pbar.set_description("loss:{:.4f} ppl:{:.1f}".format(np.mean(l), np.mean(p)))
+            if (j > 4 and ty == "train"): break
+        loss = np.mean(l)
+        ppl = np.mean(p)
+        ent_b = np.mean(ent_b)
+        bleu_score_b = moses_multi_bleu(np.array(hyp_b), np.array(ref), lowercase=True)
+
+        if (verbose):
+            print("----------------------------------------------------------------------")
+            print("----------------------------------------------------------------------")
+            print_all(dial, ref, hyp_b, max_print=3 if ty != "test" else 100000000)
+            print("EVAL\tLoss\tPeplexity\tEntl_b\tBleu_b")
+            print("{}\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(ty, loss, ppl, ent_b, bleu_score_b))
+        return loss, ppl, ent_b, bleu_score_b
 
 
 class NoamOpt:
