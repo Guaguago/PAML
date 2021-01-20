@@ -247,12 +247,15 @@ class Model(nn.Module):
         masks = batch['masks']
         loss, nll_loss, kld_loss, ppl, kld_weight = self.compute_loss(outputs, labels, masks, 0)  # 计算损失
         loss = loss.mean()
-        if (train):
+        ppl = ppl.mean().exp()
+        nll_loss = nll_loss.mean()
+        kld_loss = (kld_loss * kld_weight).mean()
+        if train:
             loss.backward()  # 反向传播
             self.optim.step()  # 更新参数
             self.optim.optimizer.zero_grad()  # 清空梯度
 
-        return loss.item(), ppl.mean(), loss
+        return loss.item(), ppl.item(), loss
 
     def compute_loss(self, outputs, labels, masks, global_step):
         def gaussian_kld(recog_mu, recog_logvar, prior_mu, prior_logvar):  # [batch, latent]
@@ -305,7 +308,7 @@ class Model(nn.Module):
         for j, batch in pbar:
             loss, ppl, _ = self.train_one_batch(batch, train=False)
             l.append(loss)
-            p.append(ppl.item())
+            p.append(ppl)
             if ((j < 3 and ty != "test") or ty == "test"):
 
                 # sent_b, _ = t.translate_batch(batch)
