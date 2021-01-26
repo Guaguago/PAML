@@ -144,7 +144,7 @@ tasks = p.get_personas('train')
 tasks_iter = make_infinite_list(tasks)
 
 # meta early stop
-patience = 150
+patience = 300
 if config.fix_dialnum_train:
     patience = 300
 # best_loss = 10000000
@@ -264,12 +264,12 @@ for meta_iteration in range(config.epochs):
         val_kld_weight_after /= 100
 
         print('val_loss: {:.3f} ===> {:.3f}'.format(val_batch_loss_before, val_batch_loss_after))
-        print('before fine-tuning: {:.3f} = {:.3f} + {:.3f} * {:.3f}'.format(
+        print('zero-shot: {:.3f} = {:.3f} + {:.3f} * {:.3f}'.format(
             val_batch_loss_before,
             val_nll_loss_before,
             val_kld_weight_before,
             val_kld_loss_before))
-        print('after fine-tuning: {:.3f} = {:.3f} + {:.3f} * {:.3f}'.format(
+        print('few-shot: {:.3f} = {:.3f} + {:.3f} * {:.3f}'.format(
             val_batch_loss_before,
             val_nll_loss_before,
             val_kld_weight_before,
