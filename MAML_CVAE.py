@@ -270,10 +270,10 @@ for meta_iteration in range(config.epochs):
             val_kld_weight_before,
             val_kld_loss_before))
         print('few-shot: {:.3f} = {:.3f} + {:.3f} * {:.3f}'.format(
-            val_batch_loss_before,
-            val_nll_loss_before,
-            val_kld_weight_before,
-            val_kld_loss_before))
+            val_batch_loss_after,
+            val_nll_loss_after,
+            val_kld_weight_after,
+            val_kld_loss_after))
 
         # check early stop
         # if np.mean(val_loss_meta) < best_loss:
