@@ -243,9 +243,9 @@ for meta_iteration in range(config.epochs):
             val_loss_meta.append(math.exp(val_loss.item()))
 
             val_batch_loss_after += val_loss
-            val_nll_loss_after += nll
-            val_kld_loss_after += kld
-            val_kld_weight_after += w
+            val_nll_loss_after += val_nll
+            val_kld_loss_after += val_kld
+            val_kld_weight_after += val_weight
             # updated result
 
             meta_net.load_state_dict({name: weights_original[name] for name in weights_original})
