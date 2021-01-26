@@ -94,6 +94,7 @@ class Model(nn.Module):
                            model_config.max_grad_norm)
         self.optim.set_parameters(self.parameters())  # 给优化器设置参数
 
+        self.global_step = 0
         if model_file_path is not None:
             self.load_model(model_file_path)
 
@@ -236,26 +237,26 @@ class Model(nn.Module):
         self.decoder.load_state_dict(checkpoint['decoder'])
         self.projector.load_state_dict(checkpoint['projector'])
         epoch = checkpoint['epoch']
-        global_step = checkpoint['global_step']
+        self.global_step = checkpoint['global_step']
         print('载入模型完成')
-        return epoch, global_step
+        return epoch
 
     def train_one_batch(self, batch, train=True):
         output_vocab, _mu, _logvar, mu, logvar = self.forward(batch, gpu=config.USE_CUDA)  # 前向传播
         outputs = (output_vocab, _mu, _logvar, mu, logvar)
         labels = batch['responses'][:, 1:]  # 去掉start_id
         masks = batch['masks']
-        loss, nll_loss, kld_loss, ppl, kld_weight = self.compute_loss(outputs, labels, masks, 0)  # 计算损失
+        loss, nll_loss, kld_loss, ppl, kld_weight = self.compute_loss(outputs, labels, masks, self.global_step)  # 计算损失
         loss = loss.mean()
         ppl = ppl.mean().exp()
         nll_loss = nll_loss.mean()
-        kld_loss = (kld_loss * kld_weight).mean()
+        kld_loss = kld_loss.mean()
         if train:
             loss.backward()  # 反向传播
             self.optim.step()  # 更新参数
             self.optim.optimizer.zero_grad()  # 清空梯度
 
-        return loss.item(), ppl.item(), loss
+        return loss.item(), ppl.item(), loss, nll_loss.item(), kld_loss.item(), kld_weight
 
     def compute_loss(self, outputs, labels, masks, global_step):
         def gaussian_kld(recog_mu, recog_logvar, prior_mu, prior_logvar):  # [batch, latent]
@@ -288,8 +289,8 @@ class Model(nn.Module):
         kld_loss = gaussian_kld(mu, logvar, _mu, _logvar)
 
         # kl退火
-        # kld_weight = min(1.0 * global_step / model_config.kl_step, 1)  # 一次性退火
-        kld_weight = min(1.0 * (global_step % (2 * self.model_config.kl_step)) / self.model_config.kl_step, 1)  # 周期性退火
+        kld_weight = min(1.0 * global_step / self.model_config.kl_step, 1)  # 一次性退火
+        # kld_weight = min(1.0 * (global_step % (2 * self.model_config.kl_step)) / self.model_config.kl_step, 1)  # 周期性退火
 
         # 损失
         loss = nll_loss + kld_weight * kld_loss
