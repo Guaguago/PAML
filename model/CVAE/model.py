@@ -139,7 +139,7 @@ class Model(nn.Module):
                 # output: [1, batch, dim_out]
                 # state: [num_layer, batch, dim_out]
                 output, state = self.decoder(decoder_input, state)
-                assert output.squeeze().equal(state[0][-1])
+                assert output.squeeze(0).equal(state[0][-1])
                 outputs.append(output)
 
             outputs = torch.cat(outputs, 0).transpose(0, 1)  # [batch, seq-1, dim_out]
