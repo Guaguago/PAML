@@ -307,7 +307,7 @@ class Model(nn.Module):
 
         pbar = tqdm(enumerate(data), total=len(data))
         for j, batch in pbar:
-            loss, ppl, _ = self.train_one_batch(batch, train=False)
+            loss, ppl, _, _, _, _ = self.train_one_batch(batch, train=False)
             l.append(loss)
             p.append(ppl)
             if ((j < 3 and ty != "test") or ty == "test"):
