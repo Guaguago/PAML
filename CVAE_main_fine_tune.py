@@ -31,7 +31,7 @@ def do_learning(model, train_iter, val_iter, iterations):
     logger[str(0)] = [loss, ppl_val, ent_b, bleu_score_b]
     for i in range(1, iterations):
         for j, d in enumerate(train_iter):
-            _, _, _ = model.train_one_batch(d)
+            _, _, _, _, _, _ = model.train_one_batch(d)
         if (i in [1, 3, 5, 7, 10]):  # 1,3,5,7,
             loss, ppl_val, ent_b, bleu_score_b = model.evaluate(val_iter, model_name=config.model, ty="test",
                                                                 verbose=False)
