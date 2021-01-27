@@ -2,6 +2,7 @@ import matplotlib
 from utils.data_reader import Personas_CVAE
 from model.CVAE.model import Model
 from model.CVAE.util.config import Model_Config
+
 matplotlib.use('Agg')
 from utils.data_reader import Personas
 from model.transformer import Transformer
@@ -29,13 +30,15 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 
 def generate(model, data, persona):
-    t = Translator(model, model.vocab)
+    # t = Translator(model, model.vocab)
     for j, batch in enumerate(data):
         _, _, _, _, _, _ = model.train_one_batch(batch, train=False)
-        sent_b, _ = t.translate_batch(batch)
+        # sent_b, _ = t.translate_batch(batch)
+        output_vocab, _, _, _, _ = model.forward(batch, inference=True, max_len=60, gpu=config.USE_CUDA)
+        sent_b = output_vocab.argmax(2).detach().tolist()
         for i in range(len(batch["target_txt"])):
             new_words = []
-            for w in sent_b[i][0]:
+            for w in sent_b[i]:
                 if w == config.EOS_idx:
                     break
                 new_words.append(w)
@@ -59,6 +62,7 @@ def do_learning(model, train_iter, val_iter, iterations, persona):
         for j, d in enumerate(train_iter):
             _, _, _, _, _, _ = model.train_one_batch(d)
     generate(model, val_iter, persona)
+
 
 model_config = Model_Config()
 
