@@ -30,9 +30,9 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 
 def generate(model, data, persona):
-    # t = Translator(model, model.vocab)
+    model.eval()
     for j, batch in enumerate(data):
-        _, _, _, _, _, _ = model.train_one_batch(batch, train=False)
+        # _, _, _, _, _, _ = model.train_one_batch(batch, train=False)
         # sent_b, _ = t.translate_batch(batch)
         output_vocab, _, _, _, _ = model.forward(batch, inference=True, max_len=60, gpu=config.USE_CUDA)
         sent_b = output_vocab.argmax(2).detach().tolist()
@@ -55,7 +55,7 @@ def generate(model, data, persona):
             print("Ref:{}".format(batch["target_txt"][i]))
             print("----------------------------------------------------------------------")
             print("----------------------------------------------------------------------")
-
+    model.train()
 
 def do_learning(model, train_iter, val_iter, iterations, persona):
     for i in range(1, iterations):
@@ -79,7 +79,7 @@ with open(filename, 'rb') as f:
     persona_map = pickle.load(f)
 
 # generate
-iterations = 11
+iterations = 1
 weights_original = deepcopy(model.state_dict())
 tasks = p.get_personas('test')
 for per in tqdm(tasks):
